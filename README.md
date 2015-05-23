@@ -15,4 +15,15 @@ This is
   
 ## Get it to work
 
-Find the dependencies, `gem install` them, take a look at `acceptor.rb` which is pretty self-explanatory.
+`gem build rowr_interface.gemspec`
+`gem install ./row r_interface-*.gem`
+
+Usage: See `bin/example`.
+
+## Dependencies
+
+`gem install serialport`
+
+## Notes
+
+Use at your own risk. Use under MIT license if you really need to have one.
