@@ -17,7 +17,7 @@ This is
 
 `gem build rowr_interface.gemspec`
 
-`gem install ./row r_interface-*.gem`
+`gem install ./rowr_interface-*.gem`
 
 Usage: See `bin/example`.
 
