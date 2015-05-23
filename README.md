@@ -16,6 +16,7 @@ This is
 ## Get it to work
 
 `gem build rowr_interface.gemspec`
+
 `gem install ./row r_interface-*.gem`
 
 Usage: See `bin/example`.
