@@ -3,4 +3,11 @@
 require './acceptor'
 
 acceptor = Acceptor.new
-acceptor.start
+t = acceptor.start do |stroke_time|
+
+  puts "Stroke took " + stroke_time.to_s
+  puts "Data: " + acceptor.current_status.inspect
+
+
+end
+t.join

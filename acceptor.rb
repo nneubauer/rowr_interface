@@ -10,23 +10,38 @@ class Acceptor
 
   COMMAND_START = "USB"
   COMMAND_EXIT = "EXIT"
-  COMMAND_READ_DATA = "IRD"
-
-  MEMORY_LOCATIONS = {
+  COMMAND_READ_DATA_16_BIT = "IRD"
+  COMMAND_READ_DATA_24_BIT = "IRT"
+  
+  MEMORY_LOCATIONS_16_BIT = {
     total_distance: "057", #meters
-    total_time: "05b", #seconds
-    total_calories: "08a", #kcal
     total_strokes: "140", #n
-    current_speed: "148" #cm/s
+    current_speed: "148", #cm/s
+    current_energy: "088", #watt
   }
   
-  @port_mutex = Mutex.new
-  @data_mutex = Mutex.new
+  MEMORY_LOCATIONS_24_BIT = {
+    total_calories: "08A", #cal
+  }
+
+  def initialize  
+    @port_mutex = Mutex.new
+    @data_mutex = Mutex.new
   
-  @last_update = Time.now
-  @last_stroke_start = Time.now
-  @last_stroke_end = Time.now
-  @data = {}
+    @last_update = Time.now
+    @last_stroke_start = Time.now
+    @last_stroke_end = Time.now
+    @data = {}
+  end
+
+  def current_status
+    clone = nil
+    @data_mutex.synchronize do
+      clone = @data.clone
+    end
+
+    clone
+  end
 
   def start(&block)
     @stroke_callback = block
@@ -34,9 +49,11 @@ class Acceptor
     # Create connection
     @port = SerialPort.new(PORT_LOCATION, BAUD_RATE)
     write(COMMAND_START)
+    t = Thread.new do     
+      main_loop
+    end
     
-    main_loop
-    
+    t
   end  
   
   def end
@@ -65,13 +82,20 @@ class Acceptor
     }
   end
   
-  def request_data(memory_name)
-    memory_location = MEMORY_LOCATIONS[memory_name]
-    unless MEMORY_LOCATIONS[memory_name].nil?
-      write(COMMAND_READ_DATA + memory_location)
+  def request_data_16_bit(memory_name)
+    memory_location = MEMORY_LOCATIONS_16_BIT[memory_name]
+    unless memory_location.nil?
+      write(COMMAND_READ_DATA_16_BIT + memory_location)
     end
   end
   
+  def request_data_24_bit(memory_name)
+    memory_location = MEMORY_LOCATIONS_24_BIT[memory_name]
+    unless memory_location.nil?
+      write(COMMAND_READ_DATA_24_BIT + memory_location)
+    end
+  end
+
   def main_loop
     
     while true
@@ -80,7 +104,6 @@ class Acceptor
       query_if_necessary
         
       data = read
-      puts "Read: " + data
       parse_and_update_internals(data)
     end
     
@@ -88,23 +111,34 @@ class Acceptor
   
   def parse_and_update_internals(data)
     case data
-    when /SS/
+    when /^P.*$/
+      # pulse value unused by now
+    when /^SS/
       @last_stroke_start = Time.now
-      puts "Understood: " + "Start of stroke."
-    when /SE/
+      #puts "Understood: " + "Start of stroke."
+    when /^SE/
       @last_stroke_end = Time.now
-      puts "Understood: " + "End of stroke."
+      #puts "Understood: " + "End of stroke."
       notify_of_stroke
-    when /^IDD([0-9]{3})(.*)\r\n$/
-      value = ("0x" + $2).hex
-      data_type = MEMORY_LOCATIONS.find($1)
-      
+    when /^ID(.)(.{3})(.*)\r\n$/
+      value = ("0x" + $3).hex
+      case $1
+      when "D"
+        data_type = MEMORY_LOCATIONS_16_BIT.select {|k,v| v == $2 }.first
+      when "T"
+        data_type = MEMORY_LOCATIONS_24_BIT.select {|k,v| v == $2 }.first
+      end
+
       unless data_type.nil?
         @data_mutex.synchronize {
-          puts "Understood: " + data_type + " => " + value.to_s
-          @data[data_type] = value
+          #puts "Understood: " + data_type[0].to_s + " => " + value.to_s
+          @data[data_type[0]] = value
         }
       end
+    when /ERROR/
+      puts "ERROR."
+    else
+      # puts "Did not understand: " + data
     end
   end
   
@@ -125,12 +159,16 @@ class Acceptor
     #if query interval has passend
     if Time.now - @last_update > (UPDATE_STATE_EVERY / 1000.0)
       query!
+      @last_update = Time.now
     end
   end
   
   def query!
-    MEMORY_LOCATIONS.each do |name, location|
-      request_data(name)
+    MEMORY_LOCATIONS_16_BIT.each do |name, location|
+      request_data_16_bit(name)
+    end
+    MEMORY_LOCATIONS_24_BIT.each do |name, location|
+      request_data_24_bit(name)
     end
   end
   
