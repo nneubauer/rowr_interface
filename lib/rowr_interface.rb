@@ -1,8 +1,6 @@
-#!/usr/bin/env ruby
-
 require 'serialport'
 
-class Acceptor
+class RowrInterface
 
   BAUD_RATE = 19_200
   PORT_LOCATION = "/dev/serial/by-id/usb-Microchip_Technology_Inc._CDC_RS-232\:_WR-S4.2-if00"

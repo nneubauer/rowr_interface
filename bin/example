@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+
+require 'rowr_interface'
+
+# This example starts to listen and outputs the status everytime
+# the interface detects a stroke.
+
+interface = RowrInterface.new
+
+t = interface.start do |stroke_time|
+  puts "Stroke took " + stroke_time.to_s
+  puts "Data: " + acceptor.current_status.inspect
+end
+
+# Never end
+t.join
