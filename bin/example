@@ -9,7 +9,7 @@ interface = RowrInterface.new
 
 t = interface.start do |stroke_time|
   puts "Stroke took " + stroke_time.to_s
-  puts "Data: " + acceptor.current_status.inspect
+  puts "Data: " + interface.current_status.inspect
 end
 
 # Never end
