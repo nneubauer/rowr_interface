@@ -17,7 +17,7 @@ class WorkoutTracker
     @buckets = []
     @current_bucket = {}
     @data_mutex = Monitor.new
-    @send_queue = {}
+    @send_queue = []
     @queue_mutex = Monitor.new
   end
   
@@ -49,6 +49,9 @@ class WorkoutTracker
   def mean_without_outliers(values)
     lower_limit = values.percentile(5)
     upper_limit = values.percentile(95)
+    
+    puts "Cleaning data: " + values.inspect
+    puts "Lower: " + lower_limit.to_s + ", upper: " + upper_limit.to_s
     
     values.select { |v| v <= upper_limit && v >= lower_limit }.mean
   end
