@@ -39,7 +39,7 @@ class WorkoutTracker
       @current_bucket[type] ||= []
       @current_bucket[type] << value
       
-      puts "Added data: " @current_bucket.inspect
+      puts "Added data: " + @current_bucket.inspect
     end
   end
   
