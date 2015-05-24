@@ -67,7 +67,7 @@ class WorkoutTracker
         list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
-          type: type,
+          sample_type: type,
           quantity: mean_without_outliers(bucket[:data][type])
           }}.freeze
         puts "Just added a sample " + list.last.inspect
@@ -80,7 +80,7 @@ class WorkoutTracker
         list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
-          type: type,
+          sample_type: type,
           quantity: bucket[:data][type].max - bucket[:data][type].min
           }}.freeze
         puts "Just added a sample " + list.last.inspect
@@ -92,7 +92,7 @@ class WorkoutTracker
       list << {sample: {
         start: bucket[:start_date],
         end: bucket[:end_date],
-        type: :strokes,
+        sample_type: :strokes,
         quantity: bucket[:stroke_to_stroke_time].size
         }}.freeze
       puts "Just added a sample " + list.last.inspect
