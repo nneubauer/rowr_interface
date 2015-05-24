@@ -146,7 +146,7 @@ class RowrInterface
       puts "ERROR."
     when /AKR/
       unless @reset_callback.nil?
-        Thread.new
+        Thread.new do
           @reset_callback.call()
         end
       end
