@@ -7,6 +7,8 @@ require 'descriptive_statistics'
 class WorkoutTracker
 
   BASE_URL = 'http://192.168.0.10:3000'
+  
+  BUCKET_SIZE_IN_SECONDS = 10 #seconds
 
   def initialize
     @interface = RowrInterface.new
@@ -39,7 +41,7 @@ class WorkoutTracker
       @current_bucket[type] ||= []
       @current_bucket[type] << value
       
-      puts "Added data: " + @current_bucket.inspect
+      #puts "Added data: " + @current_bucket.inspect
     end
   end
   
@@ -54,15 +56,37 @@ class WorkoutTracker
   # creates a list of samples of a bucket, each element is immutable
   def bucket_to_list_of_samples(bucket)
     list = []
-    bucket[:data].each do |type, values|
+    average_types = [:pull_time, :rest_time, :stroke_to_stroke_time, :current_energy, :current_speed]
+    diff_types = [:total_distance, :total_calories]
+    
+    average_types.each do |type|
       list << {
         start: bucket[:start_date],
         end: bucket[:end_date],
         type: type,
-        quantity: mean_without_outliers(values)
+        quantity: mean_without_outliers(bucket[:data][type])
       }.freeze
       puts "Just added a sample " + list.last.inspect
     end
+    
+    diff_types.each do |type|
+      list << {
+        start: bucket[:start_date],
+        end: bucket[:end_date],
+        type: type,
+        quantity: bucket[:data][type].max - bucket[:data][type].min
+      }.freeze
+      puts "Just added a sample " + list.last.inspect
+    end
+    
+    list << {
+      start: bucket[:start_date],
+      end: bucket[:end_date],
+      type: :strokes,
+      quantity: bucket[:stroke_to_stroke_time].size
+    }.freeze
+    puts "Just added a sample " + list.last.inspect
+    
     list
   end
   
@@ -117,13 +141,13 @@ class WorkoutTracker
   def aggregate_to_buckets!
     Thread.new do 
       while true
-        sleep 60.0
+        sleep BUCKET_SIZE_IN_SECONDS
                 
         @data_mutex.synchronize do
           if @current_bucket.size > 0
             
             #clean buckets if the current bucket is not adjacent
-            if @buckets.size > 0 and @buckets.last[:end_date] + 90.0 < Time.now
+            if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
               puts "Cleaning out buckets, because last one is more than 90 seconds ago."
               @buckets = []
             end
