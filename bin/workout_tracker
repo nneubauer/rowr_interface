@@ -10,8 +10,8 @@ class WorkoutTracker
   USERNAME = "test"
   PASSWORD = "test"
   
-  BUCKET_SIZE_IN_SECONDS = 10 #seconds
-  MIN_BUCKETS_TO_BE_A_WORKOUT = 2
+  BUCKET_SIZE_IN_SECONDS = 60 #seconds
+  MIN_BUCKETS_TO_BE_A_WORKOUT = 5
   MAX_ERRORS = 100
   
   def initialize
