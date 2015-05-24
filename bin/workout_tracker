@@ -35,7 +35,7 @@ class WorkoutTracker
   
   # Adds data threadsafe to @current_bucket
   def add_data(type, value)
-    @data_mutex.sychronize do
+    @data_mutex.synchronize do
       @current_bucket[type] ||= []
       @current_bucket[type] << value
       
@@ -67,7 +67,7 @@ class WorkoutTracker
   end
   
   def enqueue_buckets
-    @data_mutex.sychronize do
+    @data_mutex.synchronize do
     
       if @buckets.size >= 1
         puts "Training more than 5 buckets. Posting pending buckets."
@@ -119,7 +119,7 @@ class WorkoutTracker
       while true
         sleep 60.0
                 
-        @data_mutex.sychronize do
+        @data_mutex.synchronize do
           if @current_bucket.size > 0
             
             #clean buckets if the current bucket is not adjacent

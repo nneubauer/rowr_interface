@@ -30,6 +30,7 @@ class RowrInterface
     @last_stroke_start = Time.now
     @last_stroke_end = Time.now
     @data = {}
+    @closing = false
   end
 
   def current_status
