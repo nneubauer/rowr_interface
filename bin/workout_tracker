@@ -10,7 +10,8 @@ class WorkoutTracker
   
   BUCKET_SIZE_IN_SECONDS = 10 #seconds
   MIN_BUCKETS_TO_BE_A_WORKOUT = 2
-
+  MAX_ERRORS = 100
+  
   def initialize
     @interface = RowrInterface.new
     
@@ -61,8 +62,8 @@ class WorkoutTracker
     lower_limit = values.percentile(5)
     upper_limit = values.percentile(95)
     
-    puts "Cleaning data: " + values.inspect
-    puts "Lower: " + lower_limit.to_s + ", upper: " + upper_limit.to_s
+    #puts "Cleaning data: " + values.inspect
+    #puts "Lower: " + lower_limit.to_s + ", upper: " + upper_limit.to_s
     
     values.select { |v| v <= upper_limit && v >= lower_limit }.mean
   end
@@ -81,7 +82,7 @@ class WorkoutTracker
           sample_type: type,
           quantity: mean_without_outliers(values)
           }}.freeze
-        puts "Just added a sample " + list.last.inspect
+        #puts "Just added a sample " + list.last.inspect
       end
     end
     
@@ -94,7 +95,7 @@ class WorkoutTracker
           sample_type: type.to_s.sub("current", "average"),
           quantity: mean_without_outliers(values)
           }}.freeze
-        puts "Just added a sample " + list.last.inspect
+        #puts "Just added a sample " + list.last.inspect
       end
     end
     
@@ -108,7 +109,7 @@ class WorkoutTracker
           sample_type: type,
           quantity: values.max - values.min
           }}.freeze
-        puts "Just added a sample " + list.last.inspect
+        #puts "Just added a sample " + list.last.inspect
       end
     end
     
@@ -121,21 +122,34 @@ class WorkoutTracker
         sample_type: :strokes,
         quantity: values.size
         }}.freeze
-      puts "Just added a sample " + list.last.inspect
+      #puts "Just added a sample " + list.last.inspect
     end
     
     list
   end
   
-  def enqueue_workout
-    #TODO
+  def post_workout(workout)
+    Thread.new do
+      response = Unirest.post(BASE_URL + "/workouts",
+        headers: {"Content-Type" => "application/json"},
+        parameters: {workout: workout}.to_json,
+        auth: { user: "test", password: "test" }
+      )
+  
+      if response.code != 201
+        puts "Error while posting workout: " + response.inspect
+        #retry
+        sleep(60)
+        post_workout(workout)
+      end
+    end
   end
   
   def enqueue_buckets
     @data_mutex.synchronize do
     
       if @buckets.size >= MIN_BUCKETS_TO_BE_A_WORKOUT
-        puts "Training more than 5 buckets. Posting pending buckets."
+        puts "Training more than " + MIN_BUCKETS_TO_BE_A_WORKOUT.to_s + " buckets. Posting pending buckets."
         
         @buckets.select { |b| !b[:posted] }.each do |bucket|
 
@@ -153,74 +167,83 @@ class WorkoutTracker
     end    
   end
   
+  def post_next_sample!
+    @queue_mutex.synchronize do
+    
+      if !@send_queue.empty?
+        data = @send_queue.last
+        
+        #puts "About to post: " + data.inspect
+        
+        response = Unirest.post(BASE_URL + "/samples",
+          headers: {"Content-Type" => "application/json"},
+          parameters: data.to_json,
+          auth: { user: "test", password: "test" }
+        )
+      
+        if response.code == 201
+          @send_queue.delete(data)
+          @current_workout_sample_ids << response.body.to_i
+        else
+          puts "Error while posting. " + response.inspect
+        end
+      end 
+    end
+  end
+  
   def post_data!
     Thread.new do
       while true
         sleep(1)
-      
-        @queue_mutex.synchronize do
-        
-          if !@send_queue.empty?
-            data = @send_queue.last
-            
-            puts "About to post: " + data.inspect
-            
-            response = Unirest.post(BASE_URL + "/samples",
-              headers: {"Content-Type" => "application/json"},
-              parameters: data.to_json,
-              auth: { user: "test", password: "test" }
-            )
-          
-            if response.code == 201
-              @send_queue.delete(data)
-              @current_workout_sample_ids << response.body.to_i
-            else
-              puts "Error while posting. " + response.inspect
-            end
-          end 
-        end       
+        post_next_sample!
       end
     end
+  end
+
+  def process_current_bucket_to_backlog
+    @data_mutex.synchronize do
+      
+      #clean buckets if the current bucket is not adjacent
+      if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
+        puts "Cleaning out buckets, because last one is more than " + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5).to_s + " seconds ago."
+                
+        #the workout has ended, post it (no update, who knows how long it has been...)
+        if @buckets.size > MIN_BUCKETS_TO_BE_A_WORKOUT
+          post_workout(@current_workout.clone)
+        end
+        
+        reset_workout
+        @buckets = []
+      end
+      
+      if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
+        resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
+        puts "Adding new bucket to backlist: " + resulting_bucket.inspect
+      
+        @buckets << resulting_bucket
+        
+        #update workout which is still onging
+        status = @interface.current_status
+        
+        @current_workout[:end] = Time.now
+        @current_workout[:distance] = status[:total_distance]
+        @current_workout[:energy_burned] = status[:total_calories]
+      else
+        puts "Current bucket had no strokes. Doing nothing."
+      end
+      
+      @current_bucket = {}
+      
+      enqueue_buckets
+    end
+    
   end
 
   def aggregate_to_buckets!
     Thread.new do 
       while true
         sleep BUCKET_SIZE_IN_SECONDS
-                
-        @data_mutex.synchronize do
-          
-          #clean buckets if the current bucket is not adjacent
-          if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
-            puts "Cleaning out buckets, because last one is more than " + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5).to_s + " seconds ago."
-            @buckets = []
-            
-            #the workout has ended, post it
-            enqueue_workout
-            reset_workout
-          end
-          
-          if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
-            resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
-            puts "Adding new bucket to backlist: " + resulting_bucket.inspect
-          
-            @buckets << resulting_bucket
-            
-            #update workout which is still onging
-            status = @interface.current_status
-            
-            @current_workout[:end] = Time.now
-            @current_workout[:distance] = status[:total_distance]
-            @current_workout[:energy_burned] = status[:total_calories]
-          else
-            puts "Current bucket had no strokes. Doing nothing."
-          end
-          
-          @current_bucket = {}
-          
-          enqueue_buckets
-        end
-        
+        process_current_bucket_to_backlog
       end
     end
   end
@@ -258,16 +281,33 @@ class WorkoutTracker
     
     @interface.on_reset do
       @data_mutex.synchronize do
-
-        #todo
-        #immediatly create a bucket from the remaining values
-        #publish the last samples
-        #publish the workout
-        enqueue_workout
+        #this will put the last bucket to the backlog
+        process_current_bucket_to_backlog
+         
+        #send pending samples
+        @queue_mutex.synchronize do
+          counter = 0
+          while !@send_queue.empty?
+            counter += 1
+            if counter > MAX_ERRORS
+              puts "Error while posting remaining samples."
+              @send_queue.clear
+              break
+            end
+             
+            post_next_sample!
+            sleep(0.100)
+          end
+        end
+         
+        #now reset everything and post the workout if needed
+        if @buckets.size > MIN_BUCKETS_TO_BE_A_WORKOUT
+          post_workout(@current_workout.clone)
+        end
         
         reset_workout
         @buckets = []
-        @current_bucket = {}
+        @current_workout = {}
       end
     end
     
