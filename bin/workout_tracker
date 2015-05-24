@@ -183,7 +183,9 @@ class WorkoutTracker
       
         if response.code == 201
           @send_queue.delete(data)
-          @current_workout[:sample_ids] << response.body.to_i
+          @data_mutex.synchronize do
+            @current_workout[:sample_ids] << response.body.to_s.to_i
+          end
         else
           puts "Error while posting. " + response.inspect
         end
