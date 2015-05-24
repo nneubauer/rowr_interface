@@ -277,6 +277,13 @@ class WorkoutTracker
     
     t = @interface.start
     @interface.each_stroke do |pull_time|
+      #maybe this is the start of a workout?
+      @mutex.synchronize do
+        if @buckets.empty? && @current_workout[:start] < Time.now - (BUCKET_SIZE_IN_SECONDS * MIN_BUCKETS_TO_BE_A_WORKOUT)
+          reset_workout
+        end
+      end
+      
       #calculate stroke to stroke
       stroke_to_stroke_time = Time.now - last_stroke_notification
       last_stroke_notification = Time.now
