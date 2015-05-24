@@ -312,7 +312,6 @@ class WorkoutTracker
         
         reset_workout
         @buckets = []
-        @current_workout = {}
       end
     end
     
