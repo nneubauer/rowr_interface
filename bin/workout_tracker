@@ -44,7 +44,7 @@ class WorkoutTracker
       start: Time.now,
       end: Time.now,
       distance: 0,
-      energy_burned: 0
+      energy_burned: 0,
       sample_ids: []
     }
   end
