@@ -60,32 +60,40 @@ class WorkoutTracker
     diff_types = [:total_distance, :total_calories]
     
     average_types.each do |type|
-      list << {
-        start: bucket[:start_date],
-        end: bucket[:end_date],
-        type: type,
-        quantity: mean_without_outliers(bucket[:data][type])
-      }.freeze
-      puts "Just added a sample " + list.last.inspect
+      unless bucket[:data][type].nil?
+        list << {
+          start: bucket[:start_date],
+          end: bucket[:end_date],
+          type: type,
+          quantity: mean_without_outliers(bucket[:data][type])
+        }.freeze
+        puts "Just added a sample " + list.last.inspect
+      end
     end
     
     diff_types.each do |type|
+      unless bucket[:data][type].nil?
+      
+        list << {
+          start: bucket[:start_date],
+          end: bucket[:end_date],
+          type: type,
+          quantity: bucket[:data][type].max - bucket[:data][type].min
+        }.freeze
+        puts "Just added a sample " + list.last.inspect
+      end
+    end
+    
+    #count_types
+    unless bucket[:data][:stroke_to_stroke_time].nil?
       list << {
         start: bucket[:start_date],
         end: bucket[:end_date],
-        type: type,
-        quantity: bucket[:data][type].max - bucket[:data][type].min
+        type: :strokes,
+        quantity: bucket[:stroke_to_stroke_time].size
       }.freeze
       puts "Just added a sample " + list.last.inspect
     end
-    
-    list << {
-      start: bucket[:start_date],
-      end: bucket[:end_date],
-      type: :strokes,
-      quantity: bucket[:stroke_to_stroke_time].size
-    }.freeze
-    puts "Just added a sample " + list.last.inspect
     
     list
   end
