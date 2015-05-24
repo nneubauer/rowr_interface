@@ -45,8 +45,8 @@ class WorkoutTracker
       end: Time.now,
       distance: 0,
       energy_burned: 0
+      sample_ids: []
     }
-    @current_workout_sample_ids = []
   end
   
   # Adds data threadsafe to @current_bucket
@@ -183,7 +183,7 @@ class WorkoutTracker
       
         if response.code == 201
           @send_queue.delete(data)
-          @current_workout_sample_ids << response.body.to_i
+          @current_workout[:sample_ids] << response.body.to_i
         else
           puts "Error while posting. " + response.inspect
         end
@@ -217,7 +217,12 @@ class WorkoutTracker
       end
       
       if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
-        resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
+        if !@buckets.last.nil?
+          start_date = @buckets.last[:end_date]
+        else
+          start_date = Time.now - BUCKET_SIZE_IN_SECONDS
+        end
+        resulting_bucket = {start_date: start_date, end_date: Time.now, data: @current_bucket}
         puts "Adding new bucket to backlist: " + resulting_bucket.inspect
       
         @buckets << resulting_bucket
