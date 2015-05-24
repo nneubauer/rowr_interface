@@ -144,7 +144,7 @@ class WorkoutTracker
           bucket[:posted] = true
         end        
       else
-        puts "Not enough buckets to enqueue for posting: " + @buckets.size
+        puts "Not enough buckets to enqueue for posting: " + @buckets.size.to_s
       end
     end    
   end
