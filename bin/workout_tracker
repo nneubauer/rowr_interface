@@ -134,8 +134,10 @@ class WorkoutTracker
         
           if !@send_queue.empty?
             data = @send_queue.pop
-          
-            response = Unirest.post("BASE_URL" + "/samples",
+            
+            puts "About to post: " + data.inspect
+            
+            response = Unirest.post(BASE_URL + "/samples",
               parameters: data.to_json,
               auth: { user: "test", password: "test" }
             )
@@ -163,7 +165,7 @@ class WorkoutTracker
               @buckets = []
             end
             
-            resulting_bucket = {start_date: Time.now, end_date: Time.now - 60.0, data: @current_bucket}
+            resulting_bucket = {start_date: Time.now, end_date: Time.now - BUCKET_SIZE_IN_SECONDS, data: @current_bucket}
             
             puts "Adding new bucket to backlist: " + resulting_bucket.inspect
             
