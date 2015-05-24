@@ -31,6 +31,9 @@ class RowrInterface
     @last_stroke_end = Time.now
     @data = {}
     @closing = false
+    
+    @stroke_callback = nil
+    @reset_callback = nil
   end
 
   def current_status
@@ -42,18 +45,23 @@ class RowrInterface
     clone
   end
 
-  def start(&block)
-    @stroke_callback = block
-    
+  def start    
     # Create connection
     @port = SerialPort.new(PORT_LOCATION, BAUD_RATE)
     write(COMMAND_START)
     t = Thread.new do     
       main_loop
     end
-    
     t
-  end  
+  end
+  
+  def each_stroke(&block)
+    @stroke_callback = block
+  end
+  
+  def on_reset(&block)
+    @reset_callback = block
+  end
   
   def end
       write(COMMAND_EXIT)
@@ -136,6 +144,12 @@ class RowrInterface
       end
     when /ERROR/
       puts "ERROR."
+    when /AKR/
+      unless @reset_callback.nil?
+        Thread.new
+          @reset_callback.call()
+        end
+      end
     else
       # puts "Did not understand: " + data
     end

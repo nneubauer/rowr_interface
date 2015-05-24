@@ -9,6 +9,7 @@ class WorkoutTracker
   BASE_URL = 'http://192.168.0.10:3000'
   
   BUCKET_SIZE_IN_SECONDS = 10 #seconds
+  MIN_BUCKETS_TO_BE_A_WORKOUT = 2
 
   def initialize
     @interface = RowrInterface.new
@@ -19,6 +20,8 @@ class WorkoutTracker
     @data_mutex = Monitor.new
     @send_queue = []
     @queue_mutex = Monitor.new
+    
+    reset_workout    
   end
   
   def start
@@ -35,13 +38,21 @@ class WorkoutTracker
   
   protected
   
+  def reset_workout
+    @current_workout = {
+      start: Time.now,
+      end: Time.now,
+      distance: 0,
+      energy_burned: 0
+    }
+    @current_workout_sample_ids = []
+  end
+  
   # Adds data threadsafe to @current_bucket
   def add_data(type, value)
     @data_mutex.synchronize do
       @current_bucket[type] ||= []
       @current_bucket[type] << value
-      
-      #puts "Added data: " + @current_bucket.inspect
     end
   end
   
@@ -119,7 +130,7 @@ class WorkoutTracker
   def enqueue_buckets
     @data_mutex.synchronize do
     
-      if @buckets.size >= 1
+      if @buckets.size >= MIN_BUCKETS_TO_BE_A_WORKOUT
         puts "Training more than 5 buckets. Posting pending buckets."
         
         @buckets.select { |b| !b[:posted] }.each do |bucket|
@@ -135,8 +146,6 @@ class WorkoutTracker
       else
         puts "Not enough buckets to enqueue for posting: " + @buckets.size
       end
-      
-      
     end    
   end
   
@@ -148,7 +157,7 @@ class WorkoutTracker
         @queue_mutex.synchronize do
         
           if !@send_queue.empty?
-            data = @send_queue.pop
+            data = @send_queue.last
             
             puts "About to post: " + data.inspect
             
@@ -158,15 +167,18 @@ class WorkoutTracker
               auth: { user: "test", password: "test" }
             )
           
-            if !true #todo check response status, back to queue if unsuccessful
-              @send_queue.push(data)
+            if response.status_code == 201
+              @send_queue.remove(data)
+              @current_workout_sample_ids << response.body.to_i
+            else
+              puts "Error while posting. " + response.inspect
             end
           end 
         end       
       end
     end
   end
-    
+
   def aggregate_to_buckets!
     Thread.new do 
       while true
@@ -177,15 +189,27 @@ class WorkoutTracker
             
             #clean buckets if the current bucket is not adjacent
             if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
-              puts "Cleaning out buckets, because last one is more than 90 seconds ago."
+              puts "Cleaning out buckets, because last one is more than " + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5).to_s + " seconds ago."
               @buckets = []
+              reset_workout
             end
             
-            resulting_bucket = {start_date: Time.now, end_date: Time.now - BUCKET_SIZE_IN_SECONDS, data: @current_bucket}
+            if @current_bucket[:stroke_to_stroke_time].size > 0
+              resulting_bucket = {start_date: Time.now, end_date: Time.now - BUCKET_SIZE_IN_SECONDS, data: @current_bucket}
+              puts "Adding new bucket to backlist: " + resulting_bucket.inspect
             
-            puts "Adding new bucket to backlist: " + resulting_bucket.inspect
+              @buckets << resulting_bucket
+              
+              #update workout which is still onging
+              status = @interface.current_status
+              
+              @current_workout[:end] = Time.now
+              @current_workout[:distance] = status[:total_distance]
+              @current_workout[:energy_burned] = status[:total_calories]
+            else
+              puts "Current bucket had no strokes. Doing nothing."
+            end
             
-            @buckets << resulting_bucket
             @current_bucket = {}
             
             enqueue_buckets
@@ -213,7 +237,8 @@ class WorkoutTracker
     
     last_stroke_notification = Time.now
     
-    t = @interface.start do |pull_time|
+    t = @interface.start
+    @interface.each_stroke do |pull_time|
       #calculate stroke to stroke
       stroke_to_stroke_time = Time.now - last_stroke_notification
       last_stroke_notification = Time.now
@@ -221,7 +246,21 @@ class WorkoutTracker
       add_data(:stroke_to_stroke_time, stroke_to_stroke_time)
       add_data(:pull_time, pull_time)
       add_data(:rest_time, stroke_to_stroke_time - pull_time)    
-    end  
+    end
+    
+    @interface.on_reset do
+      @data_mutex.synchronize do
+
+        #todo
+        #immediatly create a bucket from the remaining values
+        #publish the last samples
+        #publish the workout
+        
+        reset_workout
+        @buckets = []
+        @current_bucket = {}
+      end
+    end
     
     t
   end
