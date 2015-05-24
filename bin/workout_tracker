@@ -172,7 +172,7 @@ class WorkoutTracker
             )
           
             if response.code == 201
-              @send_queue.remove(data)
+              @send_queue.delete(data)
               @current_workout_sample_ids << response.body.to_i
             else
               puts "Error while posting. " + response.inspect
