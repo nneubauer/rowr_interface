@@ -127,6 +127,10 @@ class WorkoutTracker
     list
   end
   
+  def enqueue_workout
+    #TODO
+  end
+  
   def enqueue_buckets
     @data_mutex.synchronize do
     
@@ -167,7 +171,7 @@ class WorkoutTracker
               auth: { user: "test", password: "test" }
             )
           
-            if response.status_code == 201
+            if response.code == 201
               @send_queue.remove(data)
               @current_workout_sample_ids << response.body.to_i
             else
@@ -185,35 +189,36 @@ class WorkoutTracker
         sleep BUCKET_SIZE_IN_SECONDS
                 
         @data_mutex.synchronize do
-          if @current_bucket.size > 0
+          
+          #clean buckets if the current bucket is not adjacent
+          if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
+            puts "Cleaning out buckets, because last one is more than " + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5).to_s + " seconds ago."
+            @buckets = []
             
-            #clean buckets if the current bucket is not adjacent
-            if @buckets.size > 0 and @buckets.last[:end_date] + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5) < Time.now
-              puts "Cleaning out buckets, because last one is more than " + (BUCKET_SIZE_IN_SECONDS + BUCKET_SIZE_IN_SECONDS * 0.5).to_s + " seconds ago."
-              @buckets = []
-              reset_workout
-            end
-            
-            if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
-              resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
-              puts "Adding new bucket to backlist: " + resulting_bucket.inspect
-            
-              @buckets << resulting_bucket
-              
-              #update workout which is still onging
-              status = @interface.current_status
-              
-              @current_workout[:end] = Time.now
-              @current_workout[:distance] = status[:total_distance]
-              @current_workout[:energy_burned] = status[:total_calories]
-            else
-              puts "Current bucket had no strokes. Doing nothing."
-            end
-            
-            @current_bucket = {}
-            
-            enqueue_buckets
+            #the workout has ended, post it
+            enqueue_workout
+            reset_workout
           end
+          
+          if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
+            resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
+            puts "Adding new bucket to backlist: " + resulting_bucket.inspect
+          
+            @buckets << resulting_bucket
+            
+            #update workout which is still onging
+            status = @interface.current_status
+            
+            @current_workout[:end] = Time.now
+            @current_workout[:distance] = status[:total_distance]
+            @current_workout[:energy_burned] = status[:total_calories]
+          else
+            puts "Current bucket had no strokes. Doing nothing."
+          end
+          
+          @current_bucket = {}
+          
+          enqueue_buckets
         end
         
       end
@@ -258,6 +263,7 @@ class WorkoutTracker
         #immediatly create a bucket from the remaining values
         #publish the last samples
         #publish the workout
+        enqueue_workout
         
         reset_workout
         @buckets = []
