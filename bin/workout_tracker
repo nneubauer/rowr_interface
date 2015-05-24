@@ -16,9 +16,9 @@ class WorkoutTracker
     # each element in the buckets collects one minute of data
     @buckets = []
     @current_bucket = {}
-    @data_mutex = Mutex.new
+    @data_mutex = Monitor.new
     @send_queue = {}
-    @queue_mutex = Mutex.new
+    @queue_mutex = Monitor.new
   end
   
   def start
