@@ -7,6 +7,8 @@ require 'descriptive_statistics'
 class WorkoutTracker
 
   BASE_URL = 'http://192.168.0.10:3000'
+  USERNAME = "test"
+  PASSWORD = "test"
   
   BUCKET_SIZE_IN_SECONDS = 10 #seconds
   MIN_BUCKETS_TO_BE_A_WORKOUT = 2
@@ -133,7 +135,7 @@ class WorkoutTracker
       response = Unirest.post(BASE_URL + "/workouts",
         headers: {"Content-Type" => "application/json"},
         parameters: {workout: workout}.to_json,
-        auth: { user: "test", password: "test" }
+        auth: { user: USERNAME, password: PASSWORD }
       )
   
       if response.code != 201
@@ -178,7 +180,7 @@ class WorkoutTracker
         response = Unirest.post(BASE_URL + "/samples",
           headers: {"Content-Type" => "application/json"},
           parameters: data.to_json,
-          auth: { user: "test", password: "test" }
+          auth: { user: USERNAME, password: PASSWORD }
         )
       
         if response.code == 201
@@ -234,8 +236,8 @@ class WorkoutTracker
         status = @interface.current_status
         
         @current_workout[:end] = Time.now
-        @current_workout[:distance] = status[:total_distance]
-        @current_workout[:energy_burned] = status[:total_calories]
+        @current_workout[:distance] = [@current_workout[:distance], status[:total_distance]].max
+        @current_workout[:energy_burned] = [@current_workout[:energy_burned], status[:total_calories]].max
       else
         puts "Current bucket had no strokes. Doing nothing."
       end
