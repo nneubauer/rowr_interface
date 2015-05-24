@@ -1,0 +1,168 @@
+#!/usr/bin/env ruby
+
+require 'rowr_interface'
+require 'unirest'
+require 'descriptive_statistics'
+
+class WorkoutTracker
+
+  BASE_URL = 'http://192.168.0.10:3000'
+
+  def initialize
+    @interface = RowrInterface.new
+    
+    # each element in the buckets collects one minute of data
+    @buckets = []
+    @current_bucket = {}
+    @data_mutex = Mutex.new
+    @send_queue = {}
+    @queue_mutex = Mutex.new
+  end
+  
+  def start
+    liste_thread = start_listening!
+    query_thread = start_querying!
+    bucket_thread = aggregate_to_buckets!
+    data_thread = post_data!
+    
+    liste_thread.join
+    query_thread.join
+    bucket_thread.join
+    data_thread.join
+  end
+  
+  protected
+  
+  # Adds data threadsafe to @current_bucket
+  def add_data(type, value)
+    @data_mutex.sychronize do
+      @current_bucket[type] ||= []
+      @current_bucket[type] << value
+    end
+  end
+  
+  # Calculates the mean of the middle 90% of data
+  def mean_without_outliers(values)
+    lower_limit = values.percentile(5)
+    upper_limit = values.percentile(95)
+    
+    values.select { |v| v <= upper_limit && v >= lower_limit }.mean
+  end
+  
+  # creates a list of samples of a bucket, each element is immutable
+  def bucket_to_list_of_samples(bucket)
+    list = []
+    bucket[:data].each do |type, values|
+      list << {
+        start: bucket[:start_date],
+        end: bucket[:end_date],
+        type: type,
+        quantity: mean_without_outliers(values)
+      }.freeze
+      puts "Just added a sample " + list.last.inspect
+    end
+    list
+  end
+  
+  def enqueue_buckets
+    @data_mutex.sychronize do
+    
+      if buckets.size >= 5
+        puts "Training more than 5 minutes. Posting pending buckets."
+        
+        @buckets.select { |b| !b[:posted] }.each do |bucket|
+
+          bucket_to_list_of_samples(bucket).each do |sample|
+            @queue_mutex.synchronize do 
+              @send_queue << sample
+            end
+          end
+          
+          bucket[:posted] = true
+        end        
+      end
+    end    
+  end
+  
+  def post_data!
+    Thread.new do
+      while true
+        sleep(1)
+      
+        @queue_mutex.synchronize do
+        
+          if !@send_queue.empty?
+            data = @send_queue.pop
+          
+            response = Unirest.post("BASE_URL" + "/samples",
+              parameters: data.to_json,
+              auth: { user: "test", password: "test" }
+            )
+          
+            if !true #todo check response status, back to queue if unsuccessful
+              @send_queue.push(data)
+            end
+          end 
+        end       
+      end
+    end
+  end
+    
+  def aggregate_to_buckets!
+    Thread.new do 
+      while true
+        sleep 60.0
+                
+        @data_mutex.sychronize do
+          if @current_bucket.size > 0
+            
+            #clean buckets if the current bucket is not adjacent
+            if @buckets.size > 0 and @buckets.last[:end_date] + 90.0 < Time.now
+              puts "Cleaning out buckets, because last one is more than 90 seconds ago."
+              @buckets = []
+            end
+            
+            @buckets << {start_date: Time.now, end_date: Time.now - 60.0, data: @current_bucket}
+            @current_bucket = {}
+            
+            enqueue_buckets
+          end
+        end
+        
+      end
+    end
+  end
+  
+  def start_querying!
+    Thread.new do 
+      while true
+        sleep 1.0
+        data = @interface.current_status
+        
+        data.each do |key, value|
+          add_data(key, value)
+        end
+      end
+    end
+  end
+  
+  def start_listening!
+    
+    last_stroke_notification = Time.now
+    
+    t = @interface.start do |pull_time|
+      #calculate stroke to stroke
+      stroke_to_stroke_time = Time.now - last_stroke_notification
+      last_stroke_notification = Time.now
+      
+      add_data(:stroke_to_stroke_time, stroke_to_stroke_time)
+      add_data(:pull_time, pull_time)
+      add_data(:rest_time, stroke_to_stroke_time - pull_time)    
+    end  
+    
+    t
+  end
+  
+end
+
+WorkoutTracker.new.start
