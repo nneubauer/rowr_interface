@@ -64,12 +64,12 @@ class WorkoutTracker
     
     average_types.each do |type|
       unless bucket[:data][type].nil?
-        list << {
+        list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
           type: type,
           quantity: mean_without_outliers(bucket[:data][type])
-        }.freeze
+          }}.freeze
         puts "Just added a sample " + list.last.inspect
       end
     end
@@ -77,24 +77,24 @@ class WorkoutTracker
     diff_types.each do |type|
       unless bucket[:data][type].nil?
       
-        list << {
+        list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
           type: type,
           quantity: bucket[:data][type].max - bucket[:data][type].min
-        }.freeze
+          }}.freeze
         puts "Just added a sample " + list.last.inspect
       end
     end
     
     #count_types
     unless bucket[:data][:stroke_to_stroke_time].nil?
-      list << {
+      list << {sample: {
         start: bucket[:start_date],
         end: bucket[:end_date],
         type: :strokes,
         quantity: bucket[:stroke_to_stroke_time].size
-      }.freeze
+        }}.freeze
       puts "Just added a sample " + list.last.inspect
     end
     
