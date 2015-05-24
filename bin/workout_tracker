@@ -59,41 +59,56 @@ class WorkoutTracker
   # creates a list of samples of a bucket, each element is immutable
   def bucket_to_list_of_samples(bucket)
     list = []
-    average_types = [:pull_time, :rest_time, :stroke_to_stroke_time, :current_energy, :current_speed]
-    diff_types = [:total_distance, :total_calories]
-    
-    average_types.each do |type|
-      unless bucket[:data][type].nil?
+        
+    #Average types
+    [:pull_time, :rest_time, :stroke_to_stroke_time].each do |type|
+      values = bucket[:data][type]
+      unless values.nil?
         list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
           sample_type: type,
-          quantity: mean_without_outliers(bucket[:data][type])
+          quantity: mean_without_outliers(values)
           }}.freeze
         puts "Just added a sample " + list.last.inspect
       end
     end
     
-    diff_types.each do |type|
-      unless bucket[:data][type].nil?
-      
+    [:current_energy, :current_speed].each do |type|
+      values = bucket[:data][type]
+      unless values.nil?
+        list << {sample: {
+          start: bucket[:start_date],
+          end: bucket[:end_date],
+          sample_type: type.to_s.sub("current", "average"),
+          quantity: mean_without_outliers(values)
+          }}.freeze
+        puts "Just added a sample " + list.last.inspect
+      end
+    end
+    
+    #Diff types
+    [:total_distance, :total_calories].each do |type|
+      values = bucket[:data][type]
+      unless values.nil?
         list << {sample: {
           start: bucket[:start_date],
           end: bucket[:end_date],
           sample_type: type,
-          quantity: bucket[:data][type].max - bucket[:data][type].min
+          quantity: values.max - values.min
           }}.freeze
         puts "Just added a sample " + list.last.inspect
       end
     end
     
     #count_types
-    unless bucket[:data][:stroke_to_stroke_time].nil?
+    values = bucket[:data][:stroke_to_stroke_time]
+    unless values.nil?
       list << {sample: {
         start: bucket[:start_date],
         end: bucket[:end_date],
         sample_type: :strokes,
-        quantity: bucket[:stroke_to_stroke_time].size
+        quantity: values.size
         }}.freeze
       puts "Just added a sample " + list.last.inspect
     end
