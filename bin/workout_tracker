@@ -195,7 +195,7 @@ class WorkoutTracker
             end
             
             if !@current_bucket[:stroke_to_stroke_time].nil? && @current_bucket[:stroke_to_stroke_time].size > 0
-              resulting_bucket = {start_date: Time.now, end_date: Time.now - BUCKET_SIZE_IN_SECONDS, data: @current_bucket}
+              resulting_bucket = {start_date: Time.now - BUCKET_SIZE_IN_SECONDS, end_date: Time.now, data: @current_bucket}
               puts "Adding new bucket to backlist: " + resulting_bucket.inspect
             
               @buckets << resulting_bucket
@@ -243,9 +243,12 @@ class WorkoutTracker
       stroke_to_stroke_time = Time.now - last_stroke_notification
       last_stroke_notification = Time.now
       
-      add_data(:stroke_to_stroke_time, stroke_to_stroke_time)
-      add_data(:pull_time, pull_time)
-      add_data(:rest_time, stroke_to_stroke_time - pull_time)    
+      #simple noise cleaning
+      unless stroke_to_stroke_time > 5 #seconds - no one rows that slowly...
+        add_data(:stroke_to_stroke_time, stroke_to_stroke_time)
+        add_data(:pull_time, pull_time)
+        add_data(:rest_time, stroke_to_stroke_time - pull_time)   
+      end
     end
     
     @interface.on_reset do
