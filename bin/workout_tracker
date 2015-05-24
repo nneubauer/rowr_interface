@@ -185,7 +185,7 @@ class WorkoutTracker
           @send_queue.delete(data)
           @mutex.synchronize do
             puts "Response: " + response.body
-            puts "Adding sample_id " + response.body.to_s.to_i
+            puts "Adding sample_id " + response.body.to_s.to_i.to_s
             @current_workout[:sample_ids] << response.body.to_s.to_i
           end
         else
